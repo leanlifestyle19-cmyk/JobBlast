@@ -445,15 +445,28 @@ document.getElementById('btnRefreshFeed').addEventListener('click', async () => 
   try {
     const res = await fetch(S.feedUrl, {cache:'no-store'});
     if (!res.ok){ toast('Feed error: HTTP ' + res.status); return; }
-    const arr = await res.json();
-    if (!Array.isArray(arr)){ toast('Feed error: expected a JSON array'); return; }
+    let arr = await res.json();
+    // RoleScout adapter: accept { updated, jobs:[...] } wrapper as well as a bare array
+    if (arr && !Array.isArray(arr) && Array.isArray(arr.jobs)) arr = arr.jobs;
+    if (!Array.isArray(arr)){ toast('Feed error: expected a JSON array or {jobs:[...]}'); return; }
     let added = 0;
-    for (const j of arr){
+    for (const raw of arr){
+      // normalise field names (RoleScout: id/title/inst/url/source/jd)
+      const j = {
+        title: raw.title,
+        company: raw.company || raw.source || '',
+        url: raw.url,
+        location: raw.location || raw.inst || '',
+        description: raw.description || raw.jd || '',
+        posted_date: raw.posted_date || today(),
+        source: raw.source || 'feed',
+        ext_id: raw.id || ''
+      };
       if (!j.url || !j.title || !j.company) continue;
-      if (LISTINGS.some(l => l.url === j.url && l.title === j.title)) continue;
-      const rec = { id: uid(), title:j.title, company:j.company, location:j.location||'',
-        url:j.url, description:j.description||'', posted_date:j.posted_date||today(),
-        source:j.source||'feed', fetched_at: today() };
+      if (LISTINGS.some(l => (j.ext_id && l.ext_id === j.ext_id) || (l.url === j.url && l.title === j.title))) continue;
+      const rec = { id: uid(), ext_id: j.ext_id, title:j.title, company:j.company, location:j.location,
+        url:j.url, description:j.description, posted_date:j.posted_date,
+        source:j.source, fetched_at: today() };
       LISTINGS.push(rec); await idbPut('listings', rec); added++;
     }
     toast(added ? `${added} new listing${added>1?'s':''} added` : 'No new listings');
