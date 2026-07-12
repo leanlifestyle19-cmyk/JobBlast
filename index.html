@@ -440,6 +440,26 @@ function renderQueue(){
 
 document.getElementById('btnShowSkipped').addEventListener('click', () => { showSkipped = !showSkipped; renderQueue(); });
 
+const MONTHS = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+function cleanJD(raw){
+  // SuccessFactors detail pages: the real JD sits between the first and last "Apply now »";
+  // everything outside is nav menus, cookie banners and footer.
+  if (!raw) return {desc:'', date:''};
+  let desc = raw;
+  const parts = raw.split('Apply now \u00bb');
+  if (parts.length >= 3) desc = parts.slice(1, -1).join(' ');
+  let date = '';
+  const m = desc.match(/Posting Date:\s*(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+  if (m && MONTHS[m[2]]) date = `${m[3]}-${MONTHS[m[2]]}-${String(m[1]).padStart(2,'0')}`;
+  desc = desc
+    .replace(/Job Category:\s*[\w &/]+?\s*Posting Date:\s*\d{1,2}\s+[A-Za-z]{3}\s+\d{4}/, '')
+    .replace(/Institution:\s*[\w &@()'.-]+?\s*Family Group:\s*[\w &]+/, '')
+    .replace(/Job ID:\s*\d+\s*Job Function:\s*[\w &]+/, '')
+    .replace(/Req ID:\s*\d+\s*$/, '')
+    .trim();
+  return {desc, date};
+}
+
 document.getElementById('btnRefreshFeed').addEventListener('click', async () => {
   if (!S.feedUrl){ toast('No feed URL set — add your RoleScout feed in Setup'); return; }
   try {
@@ -447,18 +467,21 @@ document.getElementById('btnRefreshFeed').addEventListener('click', async () => 
     if (!res.ok){ toast('Feed error: HTTP ' + res.status); return; }
     let arr = await res.json();
     // RoleScout adapter: accept { updated, jobs:[...] } wrapper as well as a bare array
+    const feedDate = (arr && !Array.isArray(arr) && arr.updated) ? arr.updated : today();
     if (arr && !Array.isArray(arr) && Array.isArray(arr.jobs)) arr = arr.jobs;
     if (!Array.isArray(arr)){ toast('Feed error: expected a JSON array or {jobs:[...]}'); return; }
     let added = 0;
     for (const raw of arr){
+      if (raw.title && /^\[Test\]/i.test(raw.title)) continue; // portal test postings
       // normalise field names (RoleScout: id/title/inst/url/source/jd)
+      const cleaned = cleanJD(raw.jd || '');
       const j = {
         title: raw.title,
-        company: raw.company || raw.source || '',
+        company: raw.company || (raw.inst ? `${raw.source} \u2013 ${raw.inst}` : raw.source) || '',
         url: raw.url,
-        location: raw.location || raw.inst || '',
-        description: raw.description || raw.jd || '',
-        posted_date: raw.posted_date || today(),
+        location: raw.location || 'Singapore',
+        description: raw.description || cleaned.desc,
+        posted_date: raw.posted_date || cleaned.date || feedDate,
         source: raw.source || 'feed',
         ext_id: raw.id || ''
       };
