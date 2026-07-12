@@ -1,4 +1,4 @@
-const CACHE = 'jobblast-20260712c';   // M1: BUMP on EVERY index.html deploy.
+const CACHE = 'jobblast-20260712d';   // M1: BUMP on EVERY index.html deploy.
 
 // M16: list EVERY external API host here. Add to this on every API change.
 const BYPASS = [
