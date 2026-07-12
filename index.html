@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1c2733">
+<title>JobBlast</title>
+<link rel="manifest" href="./manifest.json">
+<style>
+  :root{
+    --paper:#f7f5f0; --card:#ffffff; --ink:#1c2733; --ink-soft:#5b6570;
+    --line:#ddd7ca; --chop:#c62f2f; --teal:#0f766e; --amber:#b45309;
+    --chip-bg:#eef0e9; --shadow:0 1px 3px rgba(28,39,51,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background:var(--paper); color:var(--ink); display:flex; flex-direction:column;
+    -webkit-tap-highlight-color:transparent;
+  }
+  header{
+    flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px 10px; border-bottom:2px solid var(--ink);
+  }
+  header h1{font-size:20px; letter-spacing:.5px}
+  header h1 span{color:var(--chop)}
+  #todayChip{
+    font-size:12px; font-weight:700; letter-spacing:1px; padding:5px 10px;
+    border:1.5px solid var(--ink); border-radius:3px; font-variant-numeric:tabular-nums;
+  }
+  #todayChip.hit{border-color:var(--teal); color:var(--teal)}
+  main{flex:1; min-height:0; display:flex; overflow:hidden}
+  .view{flex:1; min-height:0; display:none; flex-direction:column}
+  .view.active{display:flex}
+  .scroll{flex:1; min-height:0; overflow-y:auto; padding:14px 14px 20px}
+  .vfooter{flex-shrink:0; padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px)); border-top:1px solid var(--line); background:var(--paper)}
+  nav{
+    flex-shrink:0; display:flex; border-top:2px solid var(--ink); background:var(--card);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  nav button{
+    flex:1; padding:10px 0 8px; background:none; border:none; font-family:inherit;
+    font-size:11px; font-weight:700; letter-spacing:1.2px; color:var(--ink-soft); cursor:pointer;
+  }
+  nav button.on{color:var(--chop); border-top:3px solid var(--chop); margin-top:-2px}
+  h2.section{
+    font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+    color:var(--ink-soft); margin:14px 0 8px;
+  }
+  h2.section:first-child{margin-top:0}
+  /* ---- cards ---- */
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:6px;
+    box-shadow:var(--shadow); padding:12px; margin-bottom:10px; cursor:pointer;
+  }
+  .card .row1{display:flex; align-items:flex-start; gap:10px}
+  .card .title{font-size:15px; font-weight:600; flex:1; line-height:1.3}
+  .score{
+    flex-shrink:0; min-width:44px; text-align:center; font-weight:800; font-size:14px;
+    font-variant-numeric:tabular-nums; border:2px solid var(--ink); border-radius:4px;
+    padding:4px 5px; line-height:1;
+  }
+  .score small{display:block; font-size:8px; font-weight:700; letter-spacing:1px; margin-top:2px}
+  .score.hi{border-color:var(--teal); color:var(--teal)}
+  .score.md{border-color:var(--amber); color:var(--amber)}
+  .score.lo{border-color:var(--ink-soft); color:var(--ink-soft)}
+  .meta{font-size:12px; color:var(--ink-soft); margin-top:4px}
+  .snippet{font-size:12.5px; color:var(--ink-soft); margin-top:6px; line-height:1.4;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+  .stamp{
+    display:inline-block; font-size:10px; font-weight:800; letter-spacing:1.5px;
+    text-transform:uppercase; padding:3px 7px; border:1.5px solid currentColor;
+    border-radius:3px; margin-top:8px;
+  }
+  .st-applied{color:var(--teal)} .st-responded{color:#2563eb} .st-interview{color:#7c3aed}
+  .st-offer{color:var(--teal)} .st-rejected{color:var(--ink-soft)} .st-followup{color:var(--amber)}
+  /* ---- detail overlay ---- */
+  #detail{
+    position:fixed; inset:0; background:var(--paper); z-index:50; display:none;
+    flex-direction:column;
+  }
+  #detail.open{display:flex}
+  #detail .dhead{flex-shrink:0; display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:2px solid var(--ink)}
+  #detail .dhead button{background:none; border:1.5px solid var(--ink); border-radius:4px; padding:5px 11px; font-family:inherit; font-weight:700; cursor:pointer}
+  #detail .dhead .t{font-size:15px; font-weight:700; flex:1; line-height:1.25}
+  #dScroll{flex:1; min-height:0; overflow-y:auto; padding:14px}
+  #detail .dfoot{
+    flex-shrink:0; display:flex; gap:8px; padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));
+    border-top:2px solid var(--ink); background:var(--card);
+  }
+  .jd{font-size:13.5px; line-height:1.55; white-space:pre-wrap; background:var(--card);
+    border:1px solid var(--line); border-radius:6px; padding:12px}
+  .btn{
+    font-family:inherit; font-size:13px; font-weight:700; letter-spacing:.5px;
+    padding:11px 14px; border-radius:5px; border:1.5px solid var(--ink);
+    background:var(--card); color:var(--ink); cursor:pointer;
+  }
+  .btn.primary{background:var(--chop); border-color:var(--chop); color:#fff}
+  .btn.teal{background:var(--teal); border-color:var(--teal); color:#fff}
+  .btn.ghost{border-color:var(--line); color:var(--ink-soft)}
+  .btn.wide{flex:1}
+  .btn:disabled{opacity:.5; cursor:default}
+  .btn.sm{padding:6px 10px; font-size:12px}
+  /* ---- tailor output ---- */
+  .diff{background:var(--card); border:1px solid var(--line); border-left:3px solid var(--teal);
+    border-radius:6px; padding:10px 12px; margin-bottom:8px; font-size:13px; line-height:1.5}
+  .diff .orig{color:var(--ink-soft); text-decoration:line-through; text-decoration-color:rgba(198,47,47,.5); margin-bottom:6px}
+  .diff .newt strong{background:#fdf1d6; padding:0 2px; border-radius:2px}
+  .diff .why{font-size:11px; color:var(--amber); margin-top:6px; font-style:italic}
+  textarea, input[type=text], input[type=password], input[type=number], select{
+    width:100%; font-family:inherit; font-size:13.5px; color:var(--ink);
+    background:var(--card); border:1px solid var(--line); border-radius:5px; padding:10px;
+  }
+  textarea{line-height:1.5; resize:vertical}
+  label.f{display:block; font-size:11px; font-weight:700; letter-spacing:1.2px;
+    text-transform:uppercase; color:var(--ink-soft); margin:14px 0 5px}
+  label.f:first-child{margin-top:0}
+  .hint{font-size:11.5px; color:var(--ink-soft); margin-top:4px; line-height:1.4}
+  /* ---- stats ---- */
+  .bigstat{background:var(--card); border:1px solid var(--line); border-radius:6px;
+    padding:16px; margin-bottom:10px; box-shadow:var(--shadow)}
+  .bigstat .n{font-size:34px; font-weight:800; font-variant-numeric:tabular-nums}
+  .bigstat .l{font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink-soft)}
+  .pbar{height:10px; background:var(--chip-bg); border-radius:5px; overflow:hidden; margin-top:10px}
+  .pbar div{height:100%; background:var(--teal); border-radius:5px; transition:width .4s}
+  .funnel{display:flex; gap:6px}
+  .funnel .fcell{flex:1; background:var(--card); border:1px solid var(--line); border-radius:6px;
+    padding:10px 4px; text-align:center}
+  .funnel .fcell .n{font-size:20px; font-weight:800; font-variant-numeric:tabular-nums}
+  .funnel .fcell .l{font-size:9px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; color:var(--ink-soft)}
+  .week{display:flex; gap:6px; align-items:flex-end; height:90px; padding:0 4px}
+  .week .day{flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:4px; height:100%}
+  .week .bar{width:100%; background:var(--ink); border-radius:3px 3px 0 0; min-height:2px}
+  .week .dl{font-size:9px; color:var(--ink-soft); font-weight:700}
+  .empty{text-align:center; color:var(--ink-soft); padding:40px 20px; font-size:13.5px; line-height:1.6}
+  .toast{
+    position:fixed; left:50%; bottom:90px; transform:translateX(-50%);
+    background:var(--ink); color:#fff; font-size:13px; font-weight:600;
+    padding:10px 16px; border-radius:6px; z-index:99; opacity:0; transition:opacity .25s; pointer-events:none;
+    max-width:88%; text-align:center;
+  }
+  .toast.show{opacity:1}
+  .qtools{display:flex; gap:8px; margin-bottom:12px}
+  .err{background:#fbeaea; border:1px solid var(--chop); color:var(--chop);
+    border-radius:5px; padding:10px; font-size:12.5px; line-height:1.45; margin-bottom:10px}
+  .note-line{font-size:12px; color:var(--ink-soft); margin-top:6px; font-style:italic}
+  .spin{display:inline-block; width:14px; height:14px; border:2px solid #fff;
+    border-top-color:transparent; border-radius:50%; animation:sp .7s linear infinite; vertical-align:-2px; margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){ .spin{animation-duration:1.4s} .pbar div{transition:none} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Job<span>Blast</span></h1>
+  <div id="todayChip">0 / 8 TODAY</div>
+</header>
+
+<main>
+  <!-- QUEUE -->
+  <section class="view active" id="view-queue">
+    <div class="scroll">
+      <div class="qtools">
+        <button class="btn sm wide" id="btnRefreshFeed">Refresh feed</button>
+        <button class="btn sm ghost" id="btnShowSkipped">Show skipped</button>
+      </div>
+      <div id="queueList"></div>
+    </div>
+  </section>
+
+  <!-- TRACK -->
+  <section class="view" id="view-track">
+    <div class="scroll" id="trackScroll"></div>
+    <div class="vfooter"><button class="btn wide" id="btnExport" style="width:100%">Export CSV</button></div>
+  </section>
+
+  <!-- STATS -->
+  <section class="view" id="view-stats">
+    <div class="scroll" id="statsScroll"></div>
+  </section>
+
+  <!-- SETUP -->
+  <section class="view" id="view-setup">
+    <div class="scroll">
+      <h2 class="section">Profile</h2>
+      <label class="f">Master CV (plain text)</label>
+      <textarea id="sMasterCV" rows="6" placeholder="Paste your master CV text here. The tailoring engine rewrites bullets from this — it never invents experience."></textarea>
+      <label class="f">Sample cover letter (your voice)</label>
+      <textarea id="sSampleLetter" rows="5" placeholder="Paste 1–2 past cover letters you were happy with. Drafts will match this tone and length."></textarea>
+      <label class="f">Target keywords (comma-separated)</label>
+      <input type="text" id="sKeywords" placeholder="transformation, operational excellence, change management">
+      <label class="f">Seniority terms (comma-separated)</label>
+      <input type="text" id="sSeniority" placeholder="deputy director, assistant director, head">
+      <label class="f">Excluded companies (comma-separated)</label>
+      <input type="text" id="sExcluded" placeholder="">
+      <label class="f">Daily target</label>
+      <input type="number" id="sTarget" min="1" max="50" value="8">
+
+      <h2 class="section">AI Tailoring</h2>
+      <label class="f">Tailoring mode</label>
+      <select id="sMode">
+        <option value="handoff">Prompt handoff — copy/paste via your Claude app (free)</option>
+        <option value="api">Anthropic API — one-click (key required, billed per use)</option>
+        <option value="demo">Demo — canned output, no CV needed</option>
+      </select>
+      <div class="hint">Handoff: the app copies a ready-made prompt; you paste it into the Claude app you already subscribe to, then paste the reply back. Zero cost, ~20s extra per job.</div>
+      <label class="f">API key (only for API mode)</label>
+      <input type="password" id="sApiKey" placeholder="sk-ant-...">
+      <div class="hint">Needs an API key from console.anthropic.com (billed separately from a Claude.ai subscription). Stored only in this browser. Leave blank to use Demo mode.</div>
+      <label class="f">Model</label>
+      <select id="sModel">
+        <option value="claude-sonnet-4-6">claude-sonnet-4-6 (default)</option>
+        <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (fastest, cheapest)</option>
+        <option value="claude-opus-4-8">claude-opus-4-8 (highest quality)</option>
+      </select>
+
+      <h2 class="section">Job Feed</h2>
+      <label class="f">Feed URL (JSON)</label>
+      <input type="text" id="sFeedUrl" placeholder="https://raw.githubusercontent.com/.../listings.json">
+      <div class="hint">Point this at your RoleScout scraper output. Expected: a JSON array of {title, company, location, url, description, posted_date, source}. Merged by URL, no duplicates.</div>
+
+      <h2 class="section">Data</h2>
+      <button class="btn sm" id="btnLoadSamples">Load sample jobs</button>
+      <button class="btn sm ghost" id="btnWipe" style="margin-left:8px">Clear all data</button>
+    </div>
+    <div class="vfooter"><button class="btn teal" id="btnSave" style="width:100%">Save settings</button></div>
+  </section>
+</main>
+
+<nav>
+  <button data-v="queue" class="on">QUEUE</button>
+  <button data-v="track">TRACK</button>
+  <button data-v="stats">STATS</button>
+  <button data-v="setup">SETUP</button>
+</nav>
+
+<!-- DETAIL OVERLAY -->
+<div id="detail">
+  <div class="dhead">
+    <button id="btnBack">&larr;</button>
+    <div class="t" id="dTitle"></div>
+  </div>
+  <div id="dScroll"></div>
+  <div class="dfoot">
+    <button class="btn ghost" id="btnSkip">Skip</button>
+    <button class="btn wide" id="btnTailor">Tailor with AI</button>
+    <button class="btn primary wide" id="btnApprove">Approve &amp; Open</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// M3: register the service worker FIRST, before any async code.
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+
+// M6: all date strings via localDateStr — never toISOString (UTC breaks SGT).
+function localDateStr(d = new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function today(){ return localDateStr(new Date()); }
+
+/* ================= settings (localStorage) ================= */
+const DEFAULTS = {
+  masterCV:'', sampleLetter:'',
+  keywords:'transformation, operational excellence, change management, business process, process reengineering, lean six sigma, digital adoption, capability development, service improvement',
+  seniority:'deputy director, assistant director, senior assistant director, head, senior manager',
+  excluded:'', target:8, mode:'handoff', apiKey:'', model:'claude-sonnet-4-6', feedUrl:''
+};
+let S = {...DEFAULTS};
+try { S = {...DEFAULTS, ...(JSON.parse(localStorage.getItem('jb_settings')||'{}'))}; } catch(e){}
+
+/* ================= IndexedDB (guarded, M7) ================= */
+let db = null;
+function openDB(){
+  return new Promise((resolve) => {
+    if (!('indexedDB' in window)) return resolve(null);
+    const req = indexedDB.open('jobblast', 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('listings')) d.createObjectStore('listings', {keyPath:'id'});
+      if (!d.objectStoreNames.contains('applications')) d.createObjectStore('applications', {keyPath:'id'});
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null); // degrade gracefully
+  });
+}
+function idbAll(store){
+  return new Promise((resolve) => {
+    if (!db) return resolve([]);
+    try {
+      const tx = db.transaction(store,'readonly');
+      const rq = tx.objectStore(store).getAll();
+      rq.onsuccess = () => resolve(rq.result || []);
+      rq.onerror = () => resolve([]);
+    } catch(e){ resolve([]); }
+  });
+}
+function idbPut(store, obj){
+  return new Promise((resolve) => {
+    if (!db) return resolve(false);
+    try {
+      const tx = db.transaction(store,'readwrite');
+      tx.objectStore(store).put(obj);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    } catch(e){ resolve(false); }
+  });
+}
+function idbClear(store){
+  return new Promise((resolve) => {
+    if (!db) return resolve(false);
+    try {
+      const tx = db.transaction(store,'readwrite');
+      tx.objectStore(store).clear();
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    } catch(e){ resolve(false); }
+  });
+}
+
+/* ================= state ================= */
+let LISTINGS = [];
+let APPS = [];
+let currentId = null;
+let currentTailor = null;
+let showSkipped = false;
+
+/* ================= sample data ================= */
+const SAMPLES = [
+ {title:'Deputy Director, Operational Excellence', company:'Health Promotion Board', location:'Singapore', source:'Careers@Gov',
+  url:'https://www.careers.gov.sg/', posted_date:'2026-07-10',
+  description:'Lead the Operational Excellence office to drive organisation-wide transformation. You will champion business process reengineering across divisions, embed lean six sigma methodology, build internal capability development programmes, and steer change management for major digitalisation initiatives. Requires 10+ years in operational excellence or transformation roles, Black Belt certification preferred, and experience engaging senior public-sector stakeholders.'},
+ {title:'Senior Assistant Director, Organisation Transformation', company:'Ministry of Health', location:'Singapore', source:'Careers@Gov',
+  url:'https://www.careers.gov.sg/', posted_date:'2026-07-09',
+  description:'Drive whole-of-ministry transformation programmes. Scope covers change management strategy, business process redesign for healthcare financing workflows, digital adoption of new case-management systems, and capability development for line divisions. Strong facilitation and stakeholder engagement skills required.'},
+ {title:'Assistant Director, Digital Adoption', company:'SingHealth', location:'Outram', source:'SingHealth Careers',
+  url:'https://www.singhealth.com.sg/careers', posted_date:'2026-07-11',
+  description:'Design and run digital adoption and change management programmes for clinical and corporate systems across the cluster. Partner process owners on service improvement and workflow redesign; measure adoption outcomes; build train-the-trainer capability.'},
+ {title:'Head, Business Process Improvement', company:'National Healthcare Group', location:'Novena', source:'NHG Careers',
+  url:'https://www.nhg.com.sg/', posted_date:'2026-07-08',
+  description:'Head a small team delivering business process reengineering projects across NHG institutions. Apply lean six sigma to reduce turnaround times in shared services, run kaizen events, and report benefits realisation to senior management. Coach green belts and drive a continuous improvement culture.'},
+ {title:'Deputy Director, Change Management Office', company:'National University Health System', location:'Kent Ridge', source:'NUHS Careers',
+  url:'https://www.nuhs.edu.sg/careers', posted_date:'2026-07-07',
+  description:'Establish and lead the cluster Change Management Office. Set methodology and standards, oversee change impact assessments for major system rollouts, and develop internal change practitioner capability. Experience leading transformation in large, complex organisations essential.'},
+ {title:'Senior Manager, Service Transformation', company:'A*STAR', location:'one-north', source:'A*STAR Careers',
+  url:'https://www.a-star.edu.sg/careers', posted_date:'2026-07-06',
+  description:'Support service transformation initiatives across corporate shared services. Map processes, identify improvement opportunities, support digitalisation projects and change communications.'},
+ {title:'Assistant Director, Corporate Planning', company:'Ministry of Manpower', location:'Singapore', source:'Careers@Gov',
+  url:'https://www.careers.gov.sg/', posted_date:'2026-07-05',
+  description:'Coordinate ministry work planning, performance reporting and strategic reviews. Some exposure to organisational development and business process review projects.'},
+ {title:'Senior Executive, Administration', company:'People\u2019s Association', location:'Singapore', source:'Careers@Gov',
+  url:'https://www.careers.gov.sg/', posted_date:'2026-07-04',
+  description:'General administration, procurement support and facilities coordination for constituency programmes.'}
+];
+
+/* ================= scoring ================= */
+function csv(str){ return (str||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean); }
+function scoreListing(l){
+  const excluded = csv(S.excluded);
+  if (excluded.some(x => l.company.toLowerCase().includes(x))) return -1;
+  const kws = csv(S.keywords), sen = csv(S.seniority);
+  const t = l.title.toLowerCase(), d = (l.description||'').toLowerCase();
+  let sc = 0;
+  kws.forEach(k => { if (t.includes(k)) sc += 18; else if (d.includes(k)) sc += 6; });
+  if (sen.some(x => t.includes(x))) sc += 15;
+  return Math.min(100, sc);
+}
+
+/* ================= helpers ================= */
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function boldify(s){ // render **x** as <strong>
+  let out = esc(s), open = true;
+  while (out.includes('**')) { out = out.replace('**', open ? '<strong>' : '</strong>'); open = !open; }
+  if (!open) out += '</strong>';
+  return out;
+}
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._to); t._to = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function appFor(listingId){ return APPS.find(a => a.job_listing_id === listingId); }
+function daysSince(dateStr){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const then = new Date(y, m-1, d);
+  const [y2,m2,d2] = today().split('-').map(Number);
+  const now = new Date(y2, m2-1, d2);
+  return Math.round((now - then) / 86400000);
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ================= views / nav ================= */
+document.querySelectorAll('nav button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + b.dataset.v).classList.add('active');
+    if (b.dataset.v === 'track') renderTrack();
+    if (b.dataset.v === 'stats') renderStats();
+    if (b.dataset.v === 'setup') renderSetup();
+    if (b.dataset.v === 'queue') renderQueue();
+  });
+});
+
+/* ================= QUEUE ================= */
+function renderQueue(){
+  const box = document.getElementById('queueList');
+  const rows = LISTINGS
+    .map(l => ({...l, _score: scoreListing(l), _app: appFor(l.id)}))
+    .filter(l => l._score >= 0)
+    .filter(l => {
+      if (!l._app) return true;
+      if (l._app.status === 'skipped') return showSkipped;
+      return false; // already applied — lives in Track
+    })
+    .sort((a,b) => b._score - a._score);
+  document.getElementById('btnShowSkipped').textContent = showSkipped ? 'Hide skipped' : 'Show skipped';
+  if (!rows.length){
+    box.innerHTML = '<div class="empty">Queue is clear.<br>Refresh the feed or load sample jobs in Setup.</div>';
+    return;
+  }
+  box.innerHTML = rows.map(l => {
+    const cls = l._score >= 60 ? 'hi' : l._score >= 30 ? 'md' : 'lo';
+    return `<div class="card" data-id="${l.id}">
+      <div class="row1">
+        <div class="title">${esc(l.title)}</div>
+        <div class="score ${cls}">${l._score}<small>MATCH</small></div>
+      </div>
+      <div class="meta">${esc(l.company)} \u00b7 ${esc(l.location||'')} \u00b7 ${esc(l.source||'')} \u00b7 posted ${esc(l.posted_date||'?')}</div>
+      <div class="snippet">${esc(l.description||'')}</div>
+      ${l._app && l._app.status === 'skipped' ? '<span class="stamp st-rejected">SKIPPED</span>' : ''}
+    </div>`;
+  }).join('');
+  box.querySelectorAll('.card').forEach(c => c.addEventListener('click', () => openDetail(c.dataset.id)));
+}
+
+document.getElementById('btnShowSkipped').addEventListener('click', () => { showSkipped = !showSkipped; renderQueue(); });
+
+document.getElementById('btnRefreshFeed').addEventListener('click', async () => {
+  if (!S.feedUrl){ toast('No feed URL set — add your RoleScout feed in Setup'); return; }
+  try {
+    const res = await fetch(S.feedUrl, {cache:'no-store'});
+    if (!res.ok){ toast('Feed error: HTTP ' + res.status); return; }
+    const arr = await res.json();
+    if (!Array.isArray(arr)){ toast('Feed error: expected a JSON array'); return; }
+    let added = 0;
+    for (const j of arr){
+      if (!j.url || !j.title || !j.company) continue;
+      if (LISTINGS.some(l => l.url === j.url && l.title === j.title)) continue;
+      const rec = { id: uid(), title:j.title, company:j.company, location:j.location||'',
+        url:j.url, description:j.description||'', posted_date:j.posted_date||today(),
+        source:j.source||'feed', fetched_at: today() };
+      LISTINGS.push(rec); await idbPut('listings', rec); added++;
+    }
+    toast(added ? `${added} new listing${added>1?'s':''} added` : 'No new listings');
+    renderQueue();
+  } catch(e){ toast('Feed fetch failed: ' + e.message); }
+});
+
+/* ================= DETAIL ================= */
+function openDetail(id){
+  currentId = id; currentTailor = null;
+  const l = LISTINGS.find(x => x.id === id);
+  if (!l) return;
+  document.getElementById('dTitle').textContent = l.title + ' — ' + l.company;
+  document.getElementById('dScroll').innerHTML = `
+    <h2 class="section">Job description \u00b7 ${esc(l.source||'')} \u00b7 posted ${esc(l.posted_date||'?')}</h2>
+    <div class="jd">${esc(l.description||'(no description)')}</div>
+    <div id="tailorOut"></div>`;
+  document.getElementById('btnTailor').disabled = false;
+  document.getElementById('btnTailor').textContent = tailorBtnLabel();
+  document.getElementById('detail').classList.add('open');
+}
+document.getElementById('btnBack').addEventListener('click', () => {
+  document.getElementById('detail').classList.remove('open');
+  renderQueue();
+});
+
+document.getElementById('btnSkip').addEventListener('click', async () => {
+  if (!currentId) return;
+  let a = appFor(currentId);
+  if (!a){ a = { id: uid(), job_listing_id: currentId, status:'skipped', last_updated: today() }; APPS.push(a); }
+  else { a.status = 'skipped'; a.last_updated = today(); }
+  await idbPut('applications', a);
+  document.getElementById('detail').classList.remove('open');
+  toast('Skipped'); renderQueue();
+});
+
+/* ---- tailoring ---- */
+const DEMO_TAILOR = {
+  cv_changes: [
+    { original:'Led business process reengineering projects across the division.',
+      tailored:'Led business process reengineering projects across the division, **embedding lean six sigma methodology** and **coaching green belt practitioners**.',
+      reason:'JD explicitly asks for lean six sigma and capability coaching.' },
+    { original:'Managed change for a new case-management system rollout.',
+      tailored:'**Directed change management strategy** for a new case-management system rollout, **lifting digital adoption to 90%+ within six months**.',
+      reason:'Mirrors JD language on change management strategy and digital adoption; quantifies outcome.' }
+  ],
+  cover_letter:'[DEMO MODE — no API key set]\n\nDear Hiring Manager,\n\nI am writing to apply for this role. With over ten years leading organisational transformation and business process reengineering in the public sector, and as a certified Lean Six Sigma Black Belt, I have delivered measurable improvements in service turnaround and built internal improvement capability at scale...\n\n(With your API key and real CV loaded, this draft is generated per-job in your own voice, based on your sample letters.)'
+};
+
+function renderTailor(out){
+  currentTailor = out;
+  const box = document.getElementById('tailorOut');
+  box.innerHTML = `
+    <h2 class="section">CV changes (review the diff — bold = amended)</h2>
+    ${ (out.cv_changes||[]).map(c => `
+      <div class="diff">
+        <div class="orig">${esc(c.original)}</div>
+        <div class="newt">${boldify(c.tailored)}</div>
+        <div class="why">${esc(c.reason||'')}</div>
+      </div>`).join('') || '<div class="hint">No CV changes suggested.</div>' }
+    <h2 class="section">Cover letter draft (editable)</h2>
+    <textarea id="clText" rows="12">${esc(out.cover_letter||'')}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn sm" id="btnCopyCL">Copy letter</button>
+      <button class="btn sm" id="btnCopyCV">Copy CV changes</button>
+    </div>`;
+  document.getElementById('btnCopyCL').addEventListener('click', () => {
+    navigator.clipboard.writeText(document.getElementById('clText').value)
+      .then(()=>toast('Cover letter copied')).catch(()=>toast('Copy failed — select and copy manually'));
+  });
+  document.getElementById('btnCopyCV').addEventListener('click', () => {
+    const txt = (out.cv_changes||[]).map(c => '- ' + c.tailored.replace(/\*\*/g,'')).join('\n');
+    navigator.clipboard.writeText(txt)
+      .then(()=>toast('CV changes copied')).catch(()=>toast('Copy failed — select and copy manually'));
+  });
+}
+
+function tailorBtnLabel(){
+  return S.mode === 'handoff' ? 'Copy prompt' : S.mode === 'demo' ? 'Demo tailor' : 'Tailor with AI';
+}
+
+function buildPrompt(l){
+  return `You are a career-document tailoring assistant for a Singapore public-sector transformation professional. Rules: NEVER invent experience, employers, or qualifications not present in the master CV. Make minimal, surgical amendments — reorder emphasis and mirror the job description's exact keywords where the CV genuinely supports them. Mark every changed or added phrase inside **double asterisks**. The cover letter must match the voice, structure and length of the sample letter provided, be specific to this job, and stay grounded (no hype).
+
+MASTER CV:
+${S.masterCV}
+
+SAMPLE COVER LETTER (voice reference):
+${S.sampleLetter || '(none provided — use a grounded, plain professional tone, ~250 words)'}
+
+JOB:
+Title: ${l.title}
+Organisation: ${l.company}
+Description: ${l.description}
+
+Respond with ONLY a JSON object, no markdown fences or commentary before or after, in exactly this shape:
+{"cv_changes":[{"original":"exact bullet from master CV","tailored":"amended bullet with **changes bolded**","reason":"one line"}],"cover_letter":"full letter text"}
+Limit cv_changes to the 3-6 highest-impact amendments.`;
+}
+
+function parseTailorJSON(raw){
+  let t = (raw||'').replace(/```json|```/g,'').trim();
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a === -1 || b === -1 || b <= a) throw new Error('No JSON object found in the pasted text');
+  const obj = JSON.parse(t.slice(a, b + 1));
+  if (!obj.cover_letter && !obj.cv_changes) throw new Error('JSON parsed but missing cv_changes / cover_letter fields');
+  return obj;
+}
+
+function showHandoffPasteUI(box, promptText, copied){
+  box.innerHTML = `
+    <h2 class="section">Prompt ${copied ? 'copied' : 'ready'} — step 1 of 2</h2>
+    <div class="hint">${copied
+      ? 'Paste it into the Claude app (a new chat works best), send, then copy Claude\u2019s full reply.'
+      : 'Clipboard blocked by the browser — long-press the box below to select and copy the prompt manually.'}</div>
+    ${copied ? '' : `<textarea rows="6" readonly id="promptShow">${esc(promptText)}</textarea>`}
+    <div style="margin-top:8px"><button class="btn sm ghost" id="btnRecopy">Copy prompt again</button></div>
+    <h2 class="section">Paste Claude\u2019s reply — step 2 of 2</h2>
+    <textarea id="handoffIn" rows="9" placeholder='Paste the whole reply here \u2014 the app finds the JSON inside it.'></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn sm teal" id="btnParse">Parse result</button>
+    </div>
+    <div id="parseErr"></div>`;
+  box.querySelector('#btnRecopy').addEventListener('click', () => {
+    navigator.clipboard.writeText(promptText)
+      .then(()=>toast('Prompt copied')).catch(()=>toast('Copy failed — select the text manually'));
+  });
+  box.querySelector('#btnParse').addEventListener('click', () => {
+    const errBox = box.querySelector('#parseErr');
+    try {
+      const obj = parseTailorJSON(box.querySelector('#handoffIn').value);
+      renderTailor(obj);
+      toast('Parsed — review the diff, then Approve & Open');
+    } catch(e){
+      errBox.innerHTML = '<div class="err" style="margin-top:10px">Could not parse: ' + esc(e.message) + '.<br>Make sure you pasted Claude\u2019s complete reply, including the {\u2026} JSON block.</div>';
+    }
+  });
+  const ta = box.querySelector('#handoffIn');
+  if (ta) ta.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function startHandoff(l, box){
+  const promptText = buildPrompt(l);
+  navigator.clipboard.writeText(promptText)
+    .then(() => { toast('Prompt copied — paste it into the Claude app'); showHandoffPasteUI(box, promptText, true); })
+    .catch(() => { showHandoffPasteUI(box, promptText, false); });
+}
+
+document.getElementById('btnTailor').addEventListener('click', async () => {
+  const l = LISTINGS.find(x => x.id === currentId);
+  if (!l) return;
+  const btn = document.getElementById('btnTailor');
+  const box = document.getElementById('tailorOut');
+
+  if (S.mode === 'demo'){
+    renderTailor(DEMO_TAILOR);
+    toast('Demo output — switch tailoring mode in Setup when ready');
+    return;
+  }
+  if (!S.masterCV){
+    box.innerHTML = '<div class="err">No master CV loaded. Paste it in Setup first — the engine tailors from your real CV, it never invents experience.</div>';
+    return;
+  }
+  if (S.mode === 'handoff'){
+    startHandoff(l, box);
+    return;
+  }
+  if (!S.apiKey){
+    box.innerHTML = '<div class="err">API mode is selected but no key is set. Add a key in Setup, or switch to Prompt handoff mode (free, uses your Claude app).</div>';
+    return;
+  }
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Tailoring\u2026';
+  const prompt = buildPrompt(l);
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{
+        'content-type':'application/json',
+        'x-api-key': S.apiKey,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body: JSON.stringify({ model: S.model, max_tokens: 2500, messages:[{role:'user', content: prompt}] })
+    });
+    if (!res.ok){
+      let detail = '';
+      try { const j = await res.json(); detail = (j.error && j.error.message) ? ' — ' + j.error.message : ''; } catch(e){}
+      // M10: surface the status, never swallow it.
+      box.innerHTML = `<div class="err">Anthropic API error: HTTP ${res.status}${esc(detail)}.<br>401 = bad/missing key \u00b7 403 = key lacks access \u00b7 429 = rate limit, wait a moment \u00b7 529 = API overloaded.</div>`;
+      return;
+    }
+    const data = await res.json();
+    const text = (data.content||[]).map(i => i.type === 'text' ? i.text : '').join('\n');
+    let parsed;
+    try { parsed = parseTailorJSON(text); }
+    catch(e){
+      box.innerHTML = '<div class="err">Model returned unparseable output — try again (or switch model in Setup). Raw output below.</div>' +
+        '<div class="jd">' + esc(text) + '</div>';
+      return;
+    }
+    renderTailor(parsed);
+  } catch(e){
+    box.innerHTML = `<div class="err">Network error calling Anthropic API: ${esc(e.message)}. Check connection; the API host must be reachable.</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = tailorBtnLabel();
+  }
+});
+
+/* ---- approve & open ---- */
+document.getElementById('btnApprove').addEventListener('click', async () => {
+  const l = LISTINGS.find(x => x.id === currentId);
+  if (!l) return;
+  // duplicate detection: same company + similar title already applied
+  const dup = APPS.find(a => {
+    if (a.status === 'skipped') return false;
+    const other = LISTINGS.find(x => x.id === a.job_listing_id);
+    if (!other) return false;
+    if (other.company.toLowerCase() !== l.company.toLowerCase()) return false;
+    const w1 = new Set(other.title.toLowerCase().split(/\W+/).filter(w=>w.length>3));
+    const w2 = l.title.toLowerCase().split(/\W+/).filter(w=>w.length>3);
+    const overlap = w2.filter(w => w1.has(w)).length;
+    return overlap >= Math.min(2, w2.length);
+  });
+  if (dup && !confirm('You already have an application at ' + l.company + ' with a similar title. Apply anyway?')) return;
+
+  const clEl = document.getElementById('clText');
+  let a = appFor(currentId);
+  const docs = currentTailor ? {
+    cv_changes: currentTailor.cv_changes || [],
+    cover_letter: clEl ? clEl.value : (currentTailor.cover_letter||'')
+  } : null;
+  if (!a){
+    a = { id: uid(), job_listing_id: currentId, status:'applied',
+      applied_at: today(), last_updated: today(), notes:'', docs };
+    APPS.push(a);
+  } else {
+    a.status = 'applied'; a.applied_at = today(); a.last_updated = today(); a.docs = docs;
+  }
+  await idbPut('applications', a);
+  window.open(l.url, '_blank');
+  document.getElementById('detail').classList.remove('open');
+  updateTodayChip();
+  toast('Logged as APPLIED — finish the submission in the opened tab');
+  renderQueue();
+});
+
+/* ================= TRACK ================= */
+const STATUSES = ['applied','responded','interview','offer','rejected'];
+function renderTrack(){
+  const box = document.getElementById('trackScroll');
+  const rows = APPS.filter(a => a.status !== 'skipped')
+    .map(a => ({...a, _l: LISTINGS.find(x => x.id === a.job_listing_id)}))
+    .filter(a => a._l)
+    .sort((a,b) => (b.applied_at||'').localeCompare(a.applied_at||''));
+  if (!rows.length){
+    box.innerHTML = '<div class="empty">No applications yet.<br>Approve a job from the Queue to start tracking.</div>';
+    return;
+  }
+  box.innerHTML = rows.map(a => {
+    const followUp = a.status === 'applied' && a.applied_at && daysSince(a.applied_at) >= 7;
+    return `<div class="card" data-aid="${a.id}" style="cursor:default">
+      <div class="row1"><div class="title">${esc(a._l.title)}</div></div>
+      <div class="meta">${esc(a._l.company)} \u00b7 applied ${esc(a.applied_at||'?')}${a.status==='applied' && a.applied_at ? ' \u00b7 ' + daysSince(a.applied_at) + 'd ago' : ''}</div>
+      ${a.notes ? '<div class="note-line">' + esc(a.notes) + '</div>' : ''}
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <select class="stSel" data-aid="${a.id}" style="width:auto;padding:6px 8px;font-size:12px">
+          ${STATUSES.map(s => `<option value="${s}" ${a.status===s?'selected':''}>${s.toUpperCase()}</option>`).join('')}
+        </select>
+        <button class="btn sm ghost noteBtn" data-aid="${a.id}">Note</button>
+        ${followUp ? '<span class="stamp st-followup">FOLLOW UP</span>' : ''}
+        ${a.docs ? '<span class="stamp st-applied">DOCS SAVED</span>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('.stSel').forEach(sel => sel.addEventListener('change', async () => {
+    const a = APPS.find(x => x.id === sel.dataset.aid);
+    if (!a) return;
+    a.status = sel.value; a.last_updated = today();
+    await idbPut('applications', a);
+    toast('Status: ' + sel.value.toUpperCase());
+    renderTrack(); updateTodayChip();
+  }));
+  box.querySelectorAll('.noteBtn').forEach(btn => btn.addEventListener('click', async () => {
+    const a = APPS.find(x => x.id === btn.dataset.aid);
+    if (!a) return;
+    const n = prompt('Note for this application:', a.notes || '');
+    if (n === null) return;
+    a.notes = n; a.last_updated = today();
+    await idbPut('applications', a);
+    renderTrack();
+  }));
+}
+
+document.getElementById('btnExport').addEventListener('click', () => {
+  const rows = APPS.filter(a => a.status !== 'skipped').map(a => {
+    const l = LISTINGS.find(x => x.id === a.job_listing_id) || {};
+    return [l.company||'', l.title||'', a.status, a.applied_at||'', a.last_updated||'', (a.notes||'').replace(/"/g,'""'), l.url||''];
+  });
+  const csvStr = 'company,title,status,applied_at,last_updated,notes,url\n' +
+    rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const blob = new Blob([csvStr], {type:'text/csv'});
+  const aEl = document.createElement('a');
+  aEl.href = URL.createObjectURL(blob);
+  aEl.download = 'jobblast-' + today() + '.csv';
+  aEl.click();
+  URL.revokeObjectURL(aEl.href);
+});
+
+/* ================= STATS ================= */
+function appliedOn(dateStr){
+  return APPS.filter(a => a.applied_at === dateStr && a.status !== 'skipped').length;
+}
+function renderStats(){
+  const box = document.getElementById('statsScroll');
+  const todayN = appliedOn(today());
+  const pct = Math.min(100, Math.round(todayN / S.target * 100));
+  // streak
+  let streak = 0;
+  for (let i = 0; ; i++){
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const n = appliedOn(localDateStr(d));
+    if (n >= 1) streak++;
+    else { if (i === 0) continue; break; } // today can be 0 without breaking yesterday's streak
+    if (i > 365) break;
+  }
+  // 7-day bars
+  const days = [];
+  for (let i = 6; i >= 0; i--){
+    const d = new Date(); d.setDate(d.getDate() - i);
+    days.push({label:['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()], n: appliedOn(localDateStr(d))});
+  }
+  const maxN = Math.max(1, ...days.map(d => d.n));
+  const funnel = ['applied','responded','interview','offer','rejected'].map(s => ({
+    s, n: APPS.filter(a => a.status === s).length
+  }));
+  const total = APPS.filter(a => a.status !== 'skipped').length;
+  box.innerHTML = `
+    <div class="bigstat">
+      <div class="l">Today</div>
+      <div class="n">${todayN} <span style="font-size:16px;color:var(--ink-soft)">/ ${S.target}</span></div>
+      <div class="pbar"><div style="width:${pct}%"></div></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="bigstat" style="flex:1"><div class="l">Streak</div><div class="n">${streak}<span style="font-size:14px;color:var(--ink-soft)"> day${streak===1?'':'s'}</span></div></div>
+      <div class="bigstat" style="flex:1"><div class="l">Total applied</div><div class="n">${total}</div></div>
+    </div>
+    <h2 class="section">Last 7 days</h2>
+    <div class="bigstat"><div class="week">
+      ${days.map(d => `<div class="day"><div style="font-size:10px;font-weight:700">${d.n||''}</div><div class="bar" style="height:${Math.round(d.n/maxN*60)+2}px"></div><div class="dl">${d.label}</div></div>`).join('')}
+    </div></div>
+    <h2 class="section">Funnel</h2>
+    <div class="funnel">
+      ${funnel.map(f => `<div class="fcell"><div class="n">${f.n}</div><div class="l">${f.s}</div></div>`).join('')}
+    </div>`;
+}
+
+function updateTodayChip(){
+  const n = appliedOn(today());
+  const chip = document.getElementById('todayChip');
+  chip.textContent = `${n} / ${S.target} TODAY`;
+  chip.classList.toggle('hit', n >= S.target);
+}
+
+/* ================= SETUP ================= */
+function renderSetup(){
+  document.getElementById('sMasterCV').value = S.masterCV;
+  document.getElementById('sSampleLetter').value = S.sampleLetter;
+  document.getElementById('sKeywords').value = S.keywords;
+  document.getElementById('sSeniority').value = S.seniority;
+  document.getElementById('sExcluded').value = S.excluded;
+  document.getElementById('sTarget').value = S.target;
+  document.getElementById('sMode').value = S.mode;
+  document.getElementById('sApiKey').value = S.apiKey;
+  document.getElementById('sModel').value = S.model;
+  document.getElementById('sFeedUrl').value = S.feedUrl;
+}
+document.getElementById('btnSave').addEventListener('click', () => {
+  S.masterCV = document.getElementById('sMasterCV').value;
+  S.sampleLetter = document.getElementById('sSampleLetter').value;
+  S.keywords = document.getElementById('sKeywords').value;
+  S.seniority = document.getElementById('sSeniority').value;
+  S.excluded = document.getElementById('sExcluded').value;
+  S.target = Math.max(1, parseInt(document.getElementById('sTarget').value, 10) || 8);
+  S.mode = document.getElementById('sMode').value;
+  S.apiKey = document.getElementById('sApiKey').value.trim();
+  S.model = document.getElementById('sModel').value;
+  S.feedUrl = document.getElementById('sFeedUrl').value.trim();
+  localStorage.setItem('jb_settings', JSON.stringify(S));
+  updateTodayChip();
+  toast('Settings saved');
+});
+document.getElementById('btnLoadSamples').addEventListener('click', async () => {
+  let added = 0;
+  for (const s of SAMPLES){
+    if (LISTINGS.some(l => l.title === s.title && l.company === s.company)) continue;
+    const rec = {...s, id: uid(), fetched_at: today()};
+    LISTINGS.push(rec); await idbPut('listings', rec); added++;
+  }
+  toast(added ? added + ' sample jobs loaded' : 'Samples already loaded');
+});
+document.getElementById('btnWipe').addEventListener('click', async () => {
+  if (!confirm('Delete ALL listings and applications? Settings are kept.')) return;
+  await idbClear('listings'); await idbClear('applications');
+  LISTINGS = []; APPS = [];
+  updateTodayChip(); toast('Data cleared'); renderQueue();
+});
+
+/* ================= init ================= */
+async function init(){
+  db = await openDB();
+  LISTINGS = await idbAll('listings');
+  APPS = await idbAll('applications');
+  if (!LISTINGS.length && !localStorage.getItem('jb_seeded')){
+    for (const s of SAMPLES){
+      const rec = {...s, id: uid(), fetched_at: today()};
+      LISTINGS.push(rec); await idbPut('listings', rec);
+    }
+    localStorage.setItem('jb_seeded', '1');
+  }
+  updateTodayChip();
+  renderQueue();
+}
+init();
+</script>
+</body>
+</html>
