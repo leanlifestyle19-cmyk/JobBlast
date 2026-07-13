@@ -416,9 +416,10 @@ function renderQueue(){
     .filter(l => {
       if (!l._app) return true;
       if (l._app.status === 'skipped') return showSkipped;
-      return false; // already applied — lives in Track
+      if (l._app.status === 'draft') return true; // in-progress — stays in the queue
+      return false; // applied and beyond — lives in Track
     })
-    .sort((a,b) => b._score - a._score);
+    .sort((a,b) => (b._app && b._app.status==='draft' ? 1000 : 0) + b._score - ((a._app && a._app.status==='draft' ? 1000 : 0) + a._score) );
   document.getElementById('btnShowSkipped').textContent = showSkipped ? 'Hide skipped' : 'Show skipped';
   if (!rows.length){
     box.innerHTML = '<div class="empty">Queue is clear.<br>Refresh the feed or load sample jobs in Setup.</div>';
@@ -434,6 +435,7 @@ function renderQueue(){
       <div class="meta">${esc(l.company)} \u00b7 ${esc(l.location||'')} \u00b7 ${esc(l.source||'')} \u00b7 posted ${esc(l.posted_date||'?')}</div>
       <div class="snippet">${esc(l.description||'')}</div>
       ${l._app && l._app.status === 'skipped' ? '<span class="stamp st-rejected">SKIPPED</span>' : ''}
+      ${l._app && l._app.status === 'draft' ? '<span class="stamp st-followup">DRAFT SAVED</span>' : ''}
     </div>`;
   }).join('');
   box.querySelectorAll('.card').forEach(c => c.addEventListener('click', () => openDetail(c.dataset.id)));
@@ -504,17 +506,17 @@ function openDetail(id, review = false){
   currentId = id; currentTailor = null; reviewMode = review;
   const l = LISTINGS.find(x => x.id === id);
   if (!l) return;
-  const a = review ? appFor(id) : null;
+  const a = appFor(id);
   document.getElementById('dTitle').textContent = l.title + ' — ' + l.company;
   const jdEmpty = !l.description;
   document.getElementById('dScroll').innerHTML = `
     <h2 class="section">Job description \u00b7 ${esc(l.source||'')} \u00b7 posted ${esc(l.posted_date||'?')}</h2>
-    ${ a ? `<div class="meta" style="margin-bottom:8px">Status: <strong>${esc((a.status||'').toUpperCase())}</strong> \u00b7 applied ${esc(a.applied_at||'?')}${a.notes ? ' \u00b7 ' + esc(a.notes) : ''}</div>` : '' }
+    ${ review && a ? `<div class="meta" style="margin-bottom:8px">Status: <strong>${esc((a.status||'').toUpperCase())}</strong> \u00b7 applied ${esc(a.applied_at||'?')}${a.notes ? ' \u00b7 ' + esc(a.notes) : ''}</div>` : '' }
     <div class="jd">${ jdEmpty
         ? 'No description was captured for this listing \u2014 tap <strong>Open posting</strong> below to read it on the employer\u2019s site.'
         : esc(l.description) }</div>
     <div id="tailorOut"></div>`;
-  // restore saved tailoring docs when reviewing a tracked application
+  // restore saved docs — tracked application OR an in-progress draft
   if (a && a.docs) renderTailor({ cv_changes: a.docs.cv_changes || [], cover_letter: a.docs.cover_letter || '' });
   document.getElementById('btnTailor').disabled = false;
   document.getElementById('btnTailor').textContent = tailorBtnLabel();
@@ -572,9 +574,27 @@ function renderTailor(out){
     <h2 class="section">Cover letter draft (editable)</h2>
     <textarea id="clText" rows="12">${esc(out.cover_letter||'')}</textarea>
     <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn sm teal" id="btnSaveDraft">Save draft</button>
       <button class="btn sm" id="btnCopyCL">Copy letter</button>
       <button class="btn sm" id="btnCopyCV">Copy CV changes</button>
     </div>`;
+  document.getElementById('btnSaveDraft').addEventListener('click', async () => {
+    const clEl = document.getElementById('clText');
+    const docs = {
+      cv_changes: (currentTailor && currentTailor.cv_changes) || [],
+      cover_letter: clEl ? clEl.value : ''
+    };
+    let a = appFor(currentId);
+    if (!a){
+      a = { id: uid(), job_listing_id: currentId, status:'draft', last_updated: today(), notes:'', docs };
+      APPS.push(a);
+    } else {
+      a.docs = docs; a.last_updated = today();
+      if (a.status === 'skipped') a.status = 'draft'; // resurrect a skipped job you started working on
+    }
+    await idbPut('applications', a);
+    toast('Draft saved — reopen it anytime from the Queue');
+  });
   document.getElementById('btnCopyCL').addEventListener('click', () => {
     navigator.clipboard.writeText(document.getElementById('clText').value)
       .then(()=>toast('Cover letter copied')).catch(()=>toast('Copy failed — select and copy manually'));
@@ -759,7 +779,7 @@ document.getElementById('btnApprove').addEventListener('click', async () => {
 const STATUSES = ['applied','responded','interview','offer','rejected'];
 function renderTrack(){
   const box = document.getElementById('trackScroll');
-  const rows = APPS.filter(a => a.status !== 'skipped')
+  const rows = APPS.filter(a => a.status !== 'skipped' && a.status !== 'draft')
     .map(a => ({...a, _l: LISTINGS.find(x => x.id === a.job_listing_id)}))
     .filter(a => a._l)
     .sort((a,b) => (b.applied_at||'').localeCompare(a.applied_at||''));
@@ -813,7 +833,7 @@ function renderTrack(){
 }
 
 document.getElementById('btnExport').addEventListener('click', () => {
-  const rows = APPS.filter(a => a.status !== 'skipped').map(a => {
+  const rows = APPS.filter(a => a.status !== 'skipped' && a.status !== 'draft').map(a => {
     const l = LISTINGS.find(x => x.id === a.job_listing_id) || {};
     return [l.company||'', l.title||'', a.status, a.applied_at||'', a.last_updated||'', (a.notes||'').replace(/"/g,'""'), l.url||''];
   });
@@ -854,7 +874,7 @@ function renderStats(){
   const funnel = ['applied','responded','interview','offer','rejected'].map(s => ({
     s, n: APPS.filter(a => a.status === s).length
   }));
-  const total = APPS.filter(a => a.status !== 'skipped').length;
+  const total = APPS.filter(a => a.status !== 'skipped' && a.status !== 'draft').length;
   box.innerHTML = `
     <div class="bigstat">
       <div class="l">Today</div>
