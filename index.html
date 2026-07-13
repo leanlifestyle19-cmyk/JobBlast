@@ -247,6 +247,7 @@
     <button class="btn ghost" id="btnSkip">Skip</button>
     <button class="btn wide" id="btnTailor">Tailor with AI</button>
     <button class="btn primary wide" id="btnApprove">Approve &amp; Open</button>
+    <button class="btn teal wide" id="btnOpenSite" style="display:none">Open posting &#8599;</button>
   </div>
 </div>
 
@@ -498,22 +499,40 @@ document.getElementById('btnRefreshFeed').addEventListener('click', async () => 
 });
 
 /* ================= DETAIL ================= */
-function openDetail(id){
-  currentId = id; currentTailor = null;
+let reviewMode = false;
+function openDetail(id, review = false){
+  currentId = id; currentTailor = null; reviewMode = review;
   const l = LISTINGS.find(x => x.id === id);
   if (!l) return;
+  const a = review ? appFor(id) : null;
   document.getElementById('dTitle').textContent = l.title + ' — ' + l.company;
+  const jdEmpty = !l.description;
   document.getElementById('dScroll').innerHTML = `
     <h2 class="section">Job description \u00b7 ${esc(l.source||'')} \u00b7 posted ${esc(l.posted_date||'?')}</h2>
-    <div class="jd">${esc(l.description||'(no description)')}</div>
+    ${ a ? `<div class="meta" style="margin-bottom:8px">Status: <strong>${esc((a.status||'').toUpperCase())}</strong> \u00b7 applied ${esc(a.applied_at||'?')}${a.notes ? ' \u00b7 ' + esc(a.notes) : ''}</div>` : '' }
+    <div class="jd">${ jdEmpty
+        ? 'No description was captured for this listing \u2014 tap <strong>Open posting</strong> below to read it on the employer\u2019s site.'
+        : esc(l.description) }</div>
     <div id="tailorOut"></div>`;
+  // restore saved tailoring docs when reviewing a tracked application
+  if (a && a.docs) renderTailor({ cv_changes: a.docs.cv_changes || [], cover_letter: a.docs.cover_letter || '' });
   document.getElementById('btnTailor').disabled = false;
   document.getElementById('btnTailor').textContent = tailorBtnLabel();
+  // footer: queue = Skip / Tailor / Approve · track = Tailor / Open posting
+  document.getElementById('btnSkip').style.display = review ? 'none' : '';
+  document.getElementById('btnApprove').style.display = review ? 'none' : '';
+  document.getElementById('btnOpenSite').style.display = review ? '' : 'none';
+  document.getElementById('btnOpenSite').dataset.url = l.url || '';
   document.getElementById('detail').classList.add('open');
 }
+document.getElementById('btnOpenSite').addEventListener('click', () => {
+  const u = document.getElementById('btnOpenSite').dataset.url;
+  if (u) window.open(u, '_blank'); else toast('No URL saved for this listing');
+});
 document.getElementById('btnBack').addEventListener('click', () => {
   document.getElementById('detail').classList.remove('open');
-  renderQueue();
+  if (reviewMode) { reviewMode = false; renderTrack(); }
+  else renderQueue();
 });
 
 document.getElementById('btnSkip').addEventListener('click', async () => {
@@ -750,7 +769,7 @@ function renderTrack(){
   }
   box.innerHTML = rows.map(a => {
     const followUp = a.status === 'applied' && a.applied_at && daysSince(a.applied_at) >= 7;
-    return `<div class="card" data-aid="${a.id}" style="cursor:default">
+    return `<div class="card trackCard" data-lid="${a._l.id}">
       <div class="row1"><div class="title">${esc(a._l.title)}</div></div>
       <div class="meta">${esc(a._l.company)} \u00b7 applied ${esc(a.applied_at||'?')}${a.status==='applied' && a.applied_at ? ' \u00b7 ' + daysSince(a.applied_at) + 'd ago' : ''}</div>
       ${a.notes ? '<div class="note-line">' + esc(a.notes) + '</div>' : ''}
@@ -759,11 +778,21 @@ function renderTrack(){
           ${STATUSES.map(s => `<option value="${s}" ${a.status===s?'selected':''}>${s.toUpperCase()}</option>`).join('')}
         </select>
         <button class="btn sm ghost noteBtn" data-aid="${a.id}">Note</button>
+        <button class="btn sm ghost openBtn" data-url="${esc(a._l.url)}">Open posting \u2197</button>
         ${followUp ? '<span class="stamp st-followup">FOLLOW UP</span>' : ''}
         ${a.docs ? '<span class="stamp st-applied">DOCS SAVED</span>' : ''}
       </div>
     </div>`;
   }).join('');
+  // tap the card body → reopen the full JD (and saved docs) in read-only mode
+  box.querySelectorAll('.trackCard').forEach(c => c.addEventListener('click', (e) => {
+    if (e.target.closest('.stSel') || e.target.closest('.noteBtn') || e.target.closest('.openBtn')) return;
+    openDetail(c.dataset.lid, true);
+  }));
+  box.querySelectorAll('.openBtn').forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.open(b.dataset.url, '_blank');
+  }));
   box.querySelectorAll('.stSel').forEach(sel => sel.addEventListener('change', async () => {
     const a = APPS.find(x => x.id === sel.dataset.aid);
     if (!a) return;
